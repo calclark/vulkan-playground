@@ -1,0 +1,15 @@
+BasedOnStyle: Chromium
+
+AlignAfterOpenBracket: AlwaysBreak
+AlignTrailingComments: 'false'
+AllowAllArgumentsOnNextLine: 'false'
+AllowShortBlocksOnASingleLine: 'false'
+AllowShortFunctionsOnASingleLine: None
+BinPackArguments: 'false'
+BinPackParameters: 'false'
+Cpp11BracedListStyle: 'true'
+PointerAlignment: Left
+ReflowComments: 'false'
+SortIncludes: 'false'
+TabWidth: 2
+UseTab: ForContinuationAndIndentation
