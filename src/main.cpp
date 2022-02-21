@@ -21,7 +21,26 @@ const auto g_enable_validation_layers = false;
 const auto g_enable_validation_layers = true;
 #endif
 
-auto check_validation_layer_support() -> bool {
+VKAPI_ATTR auto VKAPI_CALL vk_debug_callback(
+		VkDebugUtilsMessageSeverityFlagBitsEXT /*severity*/,
+		VkDebugUtilsMessageTypeFlagsEXT /*type*/,
+		const VkDebugUtilsMessengerCallbackDataEXT* data,
+		void* /*user_data*/) -> VkBool32 {
+	fmt::print(stderr, "{}\n", data->pMessage);
+	return VK_FALSE;
+}
+
+auto get_vk_func(const VkInstance& instance, const char* func_name)
+		-> PFN_vkVoidFunction {
+	auto func = vkGetInstanceProcAddr(instance, func_name);
+	if (func == nullptr) {
+		fmt::print(stderr, "Vulkan extension {} not found\n", func_name);
+		std::terminate();
+	}
+	return func;
+}
+
+void verify_validation_layers_supported() {
 	auto layer_count = uint32_t{};
 	vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
 	auto available_layers = std::vector<VkLayerProperties>(layer_count);
@@ -37,10 +56,10 @@ auto check_validation_layer_support() -> bool {
 			}
 		}
 		if (!layer_found) {
-			return false;
+			fmt::print(stderr, "Failed to find validation layer: {}", layer_name);
+			std::terminate();
 		}
 	}
-	return true;
 }
 
 auto required_extensions() -> std::vector<const char*> {
@@ -70,7 +89,7 @@ auto application_info() -> VkApplicationInfo {
 }
 
 auto instance_info(
-		const std::span<const char*> extensions,
+		const std::span<const char*>& extensions,
 		const VkApplicationInfo* app_info) -> VkInstanceCreateInfo {
 	auto info = VkInstanceCreateInfo{};
 	info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -78,6 +97,7 @@ auto instance_info(
 	info.flags = 0;
 	info.pApplicationInfo = app_info;
 	if (g_enable_validation_layers) {
+		verify_validation_layers_supported();
 		info.enabledLayerCount = static_cast<uint32_t>(g_validation_layers.size());
 		info.ppEnabledLayerNames = g_validation_layers.data();
 	} else {
@@ -89,13 +109,18 @@ auto instance_info(
 	return info;
 }
 
-VKAPI_ATTR auto VKAPI_CALL vk_debug_callback(
-		VkDebugUtilsMessageSeverityFlagBitsEXT /*severity*/,
-		VkDebugUtilsMessageTypeFlagsEXT /*type*/,
-		const VkDebugUtilsMessengerCallbackDataEXT* data,
-		void* /*user_data*/) -> VkBool32 {
-	fmt::print(stderr, "{}\n", data->pMessage);
-	return VK_FALSE;
+auto debug_messenger_info() -> VkDebugUtilsMessengerCreateInfoEXT {
+	auto info = VkDebugUtilsMessengerCreateInfoEXT{};
+	info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+	info.pNext = nullptr;
+	info.flags = 0;
+	info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
+	info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
+	info.pfnUserCallback = vk_debug_callback;
+	return info;
 }
 
 class VulkanApplication {
@@ -130,10 +155,6 @@ class VulkanApplication {
 	}
 
 	void create_instance() {
-		if (g_enable_validation_layers && !check_validation_layer_support()) {
-			fmt::print(stderr, "Failed to find validation layers\n");
-			std::terminate();
-		}
 		auto app_info = application_info();
 		auto extensions = required_extensions();
 		auto inst_info = instance_info(extensions, &app_info);
@@ -147,23 +168,10 @@ class VulkanApplication {
 		if (!g_enable_validation_layers) {
 			return;
 		}
-		auto info = VkDebugUtilsMessengerCreateInfoEXT{};
-		info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-		info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-				VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
-		info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-				VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT |
-				VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
-		info.pfnUserCallback = vk_debug_callback;
 		// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
 		auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
-				vkGetInstanceProcAddr(_instance, "vkCreateDebugUtilsMessengerEXT"));
-		if (func == nullptr) {
-			fmt::print(
-					stderr,
-					"Vulkan extension vkCreateDebugUtilsMessengerEXT not found\n");
-			std::terminate();
-		}
+				get_vk_func(_instance, "vkCreateDebugUtilsMessengerEXT"));
+		auto info = debug_messenger_info();
 		if (func(_instance, &info, nullptr, &_debug_messenger) != VK_SUCCESS) {
 			fmt::print(stderr, "Failed to setup vulkan debug callback\n");
 			std::terminate();
@@ -189,13 +197,7 @@ class VulkanApplication {
 		}
 		// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
 		auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
-				vkGetInstanceProcAddr(_instance, "vkDestroyDebugUtilsMessengerEXT"));
-		if (func == nullptr) {
-			fmt::print(
-					stderr,
-					"Vulkan extension vkDestroyDebugUtilsMessengerExt not found\n");
-			std::terminate();
-		}
+				get_vk_func(_instance, "vkDestroyDebugUtilsMessengerEXT"));
 		func(_instance, _debug_messenger, nullptr);
 	}
 };
