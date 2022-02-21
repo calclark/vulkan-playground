@@ -89,18 +89,20 @@ auto application_info() -> VkApplicationInfo {
 }
 
 auto instance_info(
+		const VkDebugUtilsMessengerCreateInfoEXT* debug_info,
 		const std::span<const char*>& extensions,
 		const VkApplicationInfo* app_info) -> VkInstanceCreateInfo {
 	auto info = VkInstanceCreateInfo{};
 	info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	info.pNext = nullptr;
 	info.flags = 0;
 	info.pApplicationInfo = app_info;
 	if (g_enable_validation_layers) {
+		info.pNext = debug_info;
 		verify_validation_layers_supported();
 		info.enabledLayerCount = static_cast<uint32_t>(g_validation_layers.size());
 		info.ppEnabledLayerNames = g_validation_layers.data();
 	} else {
+		info.pNext = nullptr;
 		info.enabledLayerCount = 0;
 		info.ppEnabledLayerNames = nullptr;
 	}
@@ -156,8 +158,9 @@ class VulkanApplication {
 
 	void create_instance() {
 		auto app_info = application_info();
+		auto debug_info = debug_messenger_info();
 		auto extensions = required_extensions();
-		auto inst_info = instance_info(extensions, &app_info);
+		auto inst_info = instance_info(&debug_info, extensions, &app_info);
 		if (vkCreateInstance(&inst_info, nullptr, &_instance) != VK_SUCCESS) {
 			fmt::print(stderr, "Failed to create vulkan instance\n");
 			std::terminate();
