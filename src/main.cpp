@@ -1,7 +1,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-
 #include <fmt/core.h>
+
 #include <memory>
 #include <span>
 #include <vector>
@@ -16,9 +16,9 @@ const auto g_validation_layers =
 		std::vector<const char*>{"VK_LAYER_KHRONOS_validation"};
 
 #ifdef NDEBUG
-const auto g_enable_validation_layers = false;
+const auto g_debug = false;
 #else
-const auto g_enable_validation_layers = true;
+const auto g_debug = true;
 #endif
 
 VKAPI_ATTR auto VKAPI_CALL vk_debug_callback(
@@ -68,145 +68,133 @@ auto required_extensions() -> std::vector<const char*> {
 			glfwGetRequiredInstanceExtensions(&extension_count);
 	auto span = std::span(glfw_extensions, extension_count);
 	auto extensions = std::vector<const char*>(
-			extension_count + static_cast<unsigned int>(g_enable_validation_layers));
+			extension_count + static_cast<unsigned int>(g_debug));
 	extensions.assign(span.begin(), span.end());
-	if (g_enable_validation_layers) {
+	if (g_debug) {
 		extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 	}
 	return extensions;
 }
 
-auto application_info() -> VkApplicationInfo {
-	auto info = VkApplicationInfo{};
-	info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	info.pNext = nullptr;
-	info.pApplicationName = g_application_name;
-	info.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
-	info.pEngineName = nullptr;
-	info.engineVersion = VK_MAKE_VERSION(0, 0, 0);
-	info.apiVersion = VK_API_VERSION_1_0;
-	return info;
-}
+constexpr auto g_application_info = VkApplicationInfo{
+		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+		.pNext = nullptr,
+		.pApplicationName = g_application_name,
+		.applicationVersion = VK_MAKE_VERSION(0, 0, 1),
+		.pEngineName = nullptr,
+		.engineVersion = VK_MAKE_VERSION(0, 0, 0),
+		.apiVersion = VK_API_VERSION_1_2};
 
-auto instance_info(
-		const VkDebugUtilsMessengerCreateInfoEXT* debug_info,
-		const std::span<const char*>& extensions,
-		const VkApplicationInfo* app_info) -> VkInstanceCreateInfo {
-	auto info = VkInstanceCreateInfo{};
-	info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	info.flags = 0;
-	info.pApplicationInfo = app_info;
-	if (g_enable_validation_layers) {
-		info.pNext = debug_info;
+constexpr auto g_debug_messenger_info = VkDebugUtilsMessengerCreateInfoEXT{
+		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+		.pNext = nullptr,
+		.flags = 0,
+		.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+		.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT,
+		.pfnUserCallback = vk_debug_callback,
+		.pUserData = nullptr};
+
+auto instance_info(const std::span<const char*>& extensions)
+		-> VkInstanceCreateInfo {
+	if (g_debug) {
 		verify_validation_layers_supported();
-		info.enabledLayerCount = static_cast<uint32_t>(g_validation_layers.size());
-		info.ppEnabledLayerNames = g_validation_layers.data();
-	} else {
-		info.pNext = nullptr;
-		info.enabledLayerCount = 0;
-		info.ppEnabledLayerNames = nullptr;
 	}
-	info.enabledExtensionCount = extensions.size();
-	info.ppEnabledExtensionNames = extensions.data();
-	return info;
+	return VkInstanceCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+			.pNext = g_debug ? &g_debug_messenger_info : nullptr,
+			.flags = 0,
+			.pApplicationInfo = &g_application_info,
+			.enabledLayerCount =
+					g_debug ? static_cast<uint32_t>(g_validation_layers.size()) : 0,
+			.ppEnabledLayerNames = g_debug ? g_validation_layers.data() : nullptr,
+			.enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+			.ppEnabledExtensionNames = extensions.data()};
 }
 
-auto debug_messenger_info() -> VkDebugUtilsMessengerCreateInfoEXT {
-	auto info = VkDebugUtilsMessengerCreateInfoEXT{};
-	info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-	info.pNext = nullptr;
-	info.flags = 0;
-	info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-			VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
-	info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT |
-			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
-	info.pfnUserCallback = vk_debug_callback;
-	return info;
+auto init_window() -> GLFWwindow* {
+	glfwInit();
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	auto* window = glfwCreateWindow(
+			g_window_width,
+			g_window_height,
+			g_application_name,
+			nullptr,
+			nullptr);
+	return window;
 }
 
-class VulkanApplication {
- public:
-	void run() {
-		init_window();
-		init_vulkan();
-		loop();
-		cleanup();
+auto create_instance() -> VkInstance {
+	auto extensions = required_extensions();
+	auto inst_info = instance_info(extensions);
+	auto* instance = VkInstance{};
+	if (vkCreateInstance(&inst_info, nullptr, &instance) != VK_SUCCESS) {
+		fmt::print(stderr, "Failed to create vulkan instance\n");
+		std::terminate();
 	}
+	return instance;
+}
 
- private:
-	GLFWwindow* _window;
-	VkInstance _instance;
-	VkDebugUtilsMessengerEXT _debug_messenger;
-
-	void init_window() {
-		glfwInit();
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-		_window = glfwCreateWindow(
-				g_window_width,
-				g_window_height,
-				g_application_name,
-				nullptr,
-				nullptr);
+auto setup_debug_messenger(const VkInstance& instance)
+		-> VkDebugUtilsMessengerEXT {
+	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+	auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
+			get_vk_func(instance, "vkCreateDebugUtilsMessengerEXT"));
+	auto* messenger = VkDebugUtilsMessengerEXT{};
+	if (func(instance, &g_debug_messenger_info, nullptr, &messenger) !=
+			VK_SUCCESS) {
+		fmt::print(stderr, "Failed to setup vulkan debug callback\n");
+		std::terminate();
 	}
+	return messenger;
+}
 
-	void init_vulkan() {
-		create_instance();
-		setup_debug_messenger();
-	}
+void init_vulkan(VkInstance& instance, VkDebugUtilsMessengerEXT& messenger) {
+	instance = create_instance();
+	messenger = setup_debug_messenger(instance);
+}
 
-	void create_instance() {
-		auto app_info = application_info();
-		auto debug_info = debug_messenger_info();
-		auto extensions = required_extensions();
-		auto inst_info = instance_info(&debug_info, extensions, &app_info);
-		if (vkCreateInstance(&inst_info, nullptr, &_instance) != VK_SUCCESS) {
-			fmt::print(stderr, "Failed to create vulkan instance\n");
-			std::terminate();
-		}
+void loop(GLFWwindow* window) {
+	while (glfwWindowShouldClose(window) == 0) {
+		glfwPollEvents();
 	}
+}
 
-	void setup_debug_messenger() {
-		if (!g_enable_validation_layers) {
-			return;
-		}
-		// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-		auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
-				get_vk_func(_instance, "vkCreateDebugUtilsMessengerEXT"));
-		auto info = debug_messenger_info();
-		if (func(_instance, &info, nullptr, &_debug_messenger) != VK_SUCCESS) {
-			fmt::print(stderr, "Failed to setup vulkan debug callback\n");
-			std::terminate();
-		}
+void cleanup_debug_messenger(
+		const VkInstance& instance,
+		const VkDebugUtilsMessengerEXT& messenger) {
+	if (!g_debug) {
+		return;
 	}
+	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+	auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+			get_vk_func(instance, "vkDestroyDebugUtilsMessengerEXT"));
+	func(instance, messenger, nullptr);
+}
 
-	void loop() {
-		while (glfwWindowShouldClose(_window) == 0) {
-			glfwPollEvents();
-		}
-	}
+void cleanup(
+		GLFWwindow* window,
+		const VkInstance& instance,
+		const VkDebugUtilsMessengerEXT& messenger) {
+	cleanup_debug_messenger(instance, messenger);
+	vkDestroyInstance(instance, nullptr);
+	glfwDestroyWindow(window);
+	glfwTerminate();
+}
 
-	void cleanup() {
-		cleanup_debug_messenger();
-		vkDestroyInstance(_instance, nullptr);
-		glfwDestroyWindow(_window);
-		glfwTerminate();
-	}
-
-	void cleanup_debug_messenger() {
-		if (!g_enable_validation_layers) {
-			return;
-		}
-		// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-		auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
-				get_vk_func(_instance, "vkDestroyDebugUtilsMessengerEXT"));
-		func(_instance, _debug_messenger, nullptr);
-	}
-};
+void run() {
+	auto* window = init_window();
+	auto* instance = VkInstance{};
+	auto* messenger = VkDebugUtilsMessengerEXT{};
+	init_vulkan(instance, messenger);
+	loop(window);
+	cleanup(window, instance, messenger);
+}
 
 auto main() -> int {
-	auto app = VulkanApplication{};
-	app.run();
+	run();
 	return EXIT_SUCCESS;
 }
