@@ -143,6 +143,44 @@ auto main() -> int {
 	}
 #endif
 
+	auto device_count = uint32_t{};
+	vkEnumeratePhysicalDevices(instance, &device_count, VK_NULL_HANDLE);
+	auto devices = std::vector<VkPhysicalDevice>(device_count);
+	vkEnumeratePhysicalDevices(instance, &device_count, devices.data());
+
+	auto* device = VkPhysicalDevice{};
+	for (auto& physical_device : devices) {
+		auto queue_family_count = uint32_t{};
+		vkGetPhysicalDeviceQueueFamilyProperties(
+				physical_device,
+				&queue_family_count,
+				nullptr);
+		auto queue_families =
+				std::vector<VkQueueFamilyProperties>(queue_family_count);
+		vkGetPhysicalDeviceQueueFamilyProperties(
+				physical_device,
+				&queue_family_count,
+				queue_families.data());
+		for (auto& queue_family : queue_families) {
+			if ((queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0U) {
+				if (device == nullptr) {
+					device = physical_device;
+					break;
+				}
+				auto props = VkPhysicalDeviceProperties{};
+				vkGetPhysicalDeviceProperties(physical_device, &props);
+				if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+					device = physical_device;
+					break;
+				}
+			}
+		}
+	}
+	if (device == nullptr) {
+		fmt::print(stderr, "Failed to find a suitable physical device\n");
+		std::terminate();
+	}
+
 	glfwSetKeyCallback(window, glfw_key_callback);
 	while (glfwWindowShouldClose(window) == GLFW_FALSE) {
 		glfwPollEvents();
