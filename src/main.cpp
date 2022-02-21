@@ -154,7 +154,9 @@ auto setup_debug_messenger(const VkInstance& instance)
 
 void init_vulkan(VkInstance& instance, VkDebugUtilsMessengerEXT& messenger) {
 	instance = create_instance();
-	messenger = setup_debug_messenger(instance);
+	if (g_debug) {
+		messenger = setup_debug_messenger(instance);
+	}
 }
 
 void loop(GLFWwindow* window) {
