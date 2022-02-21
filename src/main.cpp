@@ -2,11 +2,13 @@
 #include <GLFW/glfw3.h>
 
 #include <fmt/core.h>
-#include <vector>
+#include <memory>
 #include <span>
+#include <vector>
 #include <cstdio>
 #include <cstdlib>
 
+constexpr auto g_application_name = "vulkan-demo";
 constexpr auto g_window_width = 800;
 constexpr auto g_window_height = 600;
 
@@ -55,6 +57,38 @@ auto required_extensions() -> std::vector<const char*> {
 	return extensions;
 }
 
+auto application_info() -> VkApplicationInfo {
+	auto info = VkApplicationInfo{};
+	info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+	info.pNext = nullptr;
+	info.pApplicationName = g_application_name;
+	info.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
+	info.pEngineName = nullptr;
+	info.engineVersion = VK_MAKE_VERSION(0, 0, 0);
+	info.apiVersion = VK_API_VERSION_1_0;
+	return info;
+}
+
+auto instance_info(
+		const std::span<const char*> extensions,
+		const VkApplicationInfo* app_info) -> VkInstanceCreateInfo {
+	auto info = VkInstanceCreateInfo{};
+	info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	info.pNext = nullptr;
+	info.flags = 0;
+	info.pApplicationInfo = app_info;
+	if (g_enable_validation_layers) {
+		info.enabledLayerCount = static_cast<uint32_t>(g_validation_layers.size());
+		info.ppEnabledLayerNames = g_validation_layers.data();
+	} else {
+		info.enabledLayerCount = 0;
+		info.ppEnabledLayerNames = nullptr;
+	}
+	info.enabledExtensionCount = extensions.size();
+	info.ppEnabledExtensionNames = extensions.data();
+	return info;
+}
+
 VKAPI_ATTR auto VKAPI_CALL vk_debug_callback(
 		VkDebugUtilsMessageSeverityFlagBitsEXT /*severity*/,
 		VkDebugUtilsMessageTypeFlagsEXT /*type*/,
@@ -85,7 +119,7 @@ class VulkanApplication {
 		_window = glfwCreateWindow(
 				g_window_width,
 				g_window_height,
-				"vulkan-demo",
+				g_application_name,
 				nullptr,
 				nullptr);
 	}
@@ -100,17 +134,10 @@ class VulkanApplication {
 			fmt::print(stderr, "Failed to find validation layers\n");
 			std::terminate();
 		}
-		auto create_info = VkInstanceCreateInfo{};
-		create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+		auto app_info = application_info();
 		auto extensions = required_extensions();
-		create_info.enabledExtensionCount = extensions.size();
-		create_info.ppEnabledExtensionNames = extensions.data();
-		if (g_enable_validation_layers) {
-			create_info.enabledLayerCount =
-					static_cast<uint32_t>(g_validation_layers.size());
-			create_info.ppEnabledLayerNames = g_validation_layers.data();
-		}
-		if (vkCreateInstance(&create_info, nullptr, &_instance) != VK_SUCCESS) {
+		auto inst_info = instance_info(extensions, &app_info);
+		if (vkCreateInstance(&inst_info, nullptr, &_instance) != VK_SUCCESS) {
 			fmt::print(stderr, "Failed to create vulkan instance\n");
 			std::terminate();
 		}
@@ -123,10 +150,10 @@ class VulkanApplication {
 		auto info = VkDebugUtilsMessengerCreateInfoEXT{};
 		info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 		info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-													 VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
+				VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
 		info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-											 VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT |
-											 VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
+				VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
 		info.pfnUserCallback = vk_debug_callback;
 		// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
 		auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(

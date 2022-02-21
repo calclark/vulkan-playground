@@ -1,6 +1,11 @@
+﻿---
 BasedOnStyle: Chromium
-
 AlignAfterOpenBracket: AlwaysBreak
+AlignConsecutiveMacros: 'false'
+AlignConsecutiveAssignments: 'false'
+AlignConsecutiveDeclarations: 'false'
+AlignEscapedNewlines: DontAlign
+AlignOperands: 'false'
 AlignTrailingComments: 'false'
 AllowAllArgumentsOnNextLine: 'false'
 AllowShortBlocksOnASingleLine: 'false'
@@ -11,5 +16,7 @@ Cpp11BracedListStyle: 'true'
 PointerAlignment: Left
 ReflowComments: 'false'
 SortIncludes: 'false'
-TabWidth: 2
+TabWidth: '2'
 UseTab: ForContinuationAndIndentation
+
+...
