@@ -12,7 +12,7 @@ project(
 )
 
 if get_option('debug')
-    add_project_arguments('-DUSE_VALIDATION_LAYERS=1', language: 'cpp')
+    add_project_arguments('-DUSE_VALIDATION_LAYERS', language: 'cpp')
 endif
 
 sources = [

@@ -77,7 +77,7 @@ auto main() -> int {
 	auto extensions = std::vector<const char*>(extension_count);
 	extensions.assign(span.begin(), span.end());
 
-#if USE_VALIDATION_LAYERS
+#ifdef USE_VALIDATION_LAYERS
 	extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
 	auto debug_info = VkDebugUtilsMessengerCreateInfoEXT{
@@ -96,23 +96,24 @@ auto main() -> int {
 			std::vector<const char*>{"VK_LAYER_KHRONOS_validation"};
 #endif
 
-	auto instance_info = VkInstanceCreateInfo {
-		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-#if USE_VALIDATION_LAYERS
-		.pNext = &debug_info,
+	auto instance_info = VkInstanceCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+#ifdef USE_VALIDATION_LAYERS
+			.pNext = &debug_info,
 #else
-		.pNext = VK_NULL_HANDLE,
+			.pNext = VK_NULL_HANDLE,
 #endif
-		.flags = 0, .pApplicationInfo = &application_info,
-#if USE_VALIDATION_LAYERS
-		.enabledLayerCount = static_cast<uint32_t>(validation_layers.size()),
-		.ppEnabledLayerNames = validation_layers.data(),
+			.flags = 0,
+			.pApplicationInfo = &application_info,
+#ifdef USE_VALIDATION_LAYERS
+			.enabledLayerCount = static_cast<uint32_t>(validation_layers.size()),
+			.ppEnabledLayerNames = validation_layers.data(),
 #else
-		.enabledLayerCount = 0, .ppEnabledLayerNames = VK_NULL_HANDLE,
+			.enabledLayerCount = 0,
+			.ppEnabledLayerNames = VK_NULL_HANDLE,
 #endif
-		.enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
-		.ppEnabledExtensionNames = extensions.data()
-	};
+			.enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+			.ppEnabledExtensionNames = extensions.data()};
 
 	auto* instance = VkInstance{};
 	if (vkCreateInstance(&instance_info, VK_NULL_HANDLE, &instance) !=
@@ -121,7 +122,7 @@ auto main() -> int {
 		std::terminate();
 	}
 
-#if USE_VALIDATION_LAYERS
+#ifdef USE_VALIDATION_LAYERS
 	auto vkCreateDebugDebugUtilsMessengerExt =
 			// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
 			reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
@@ -215,12 +216,12 @@ auto main() -> int {
 	}
 
 	vkDestroyDevice(logical_device, VK_NULL_HANDLE);
-#if USE_VALIDATION_LAYERS
-	auto bkDestroyDebugUtilsMessengerExt =
+#ifdef USE_VALIDATION_LAYERS
+	auto vkDestroyDebugUtilsMessengerExt =
 			// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
 			reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
 					vk_func(instance, "vkDestroyDebugUtilsMessengerEXT"));
-	bkDestroyDebugUtilsMessengerExt(instance, messenger, nullptr);
+	vkDestroyDebugUtilsMessengerExt(instance, messenger, nullptr);
 #endif
 	vkDestroyInstance(instance, VK_NULL_HANDLE);
 	glfwTerminate();
