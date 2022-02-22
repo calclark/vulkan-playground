@@ -11,6 +11,10 @@ project(
   ]
 )
 
+if get_option('debug')
+    add_project_arguments('-DUSE_VALIDATION_LAYERS=1', language: 'cpp')
+endif
+
 sources = [
   'src/main.cpp',
 ]

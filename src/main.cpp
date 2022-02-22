@@ -8,11 +8,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-#ifdef NDEBUG
-#else
-#define DEBUG
-#endif
-
 constexpr auto g_application_name = "vulkan-demo";
 constexpr auto g_window_width = 800;
 constexpr auto g_window_height = 600;
@@ -82,7 +77,7 @@ auto main() -> int {
 	auto extensions = std::vector<const char*>(extension_count);
 	extensions.assign(span.begin(), span.end());
 
-#ifdef DEBUG
+#if USE_VALIDATION_LAYERS
 	extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
 	auto debug_info = VkDebugUtilsMessengerCreateInfoEXT{
@@ -103,14 +98,14 @@ auto main() -> int {
 
 	auto instance_info = VkInstanceCreateInfo{
 			.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-#ifdef DEBUG
+#if USE_VALIDATION_LAYERS
 			.pNext = &debug_info,
 #else
 			.pNext = VK_NULL_HANDLE,
 #endif
 			.flags = 0,
 			.pApplicationInfo = &application_info,
-#ifdef DEBUG
+#if USE_VALIDATION_LAYERS
 			.enabledLayerCount = static_cast<uint32_t>(validation_layers.size()),
 			.ppEnabledLayerNames = validation_layers.data(),
 #else
@@ -127,7 +122,7 @@ auto main() -> int {
 		std::terminate();
 	}
 
-#ifdef DEBUG
+#if USE_VALIDATION_LAYERS
 	auto vkCreateDebugDebugUtilsMessengerExt =
 			// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
 			reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
@@ -145,38 +140,38 @@ auto main() -> int {
 
 	auto device_count = uint32_t{};
 	vkEnumeratePhysicalDevices(instance, &device_count, VK_NULL_HANDLE);
-	auto devices = std::vector<VkPhysicalDevice>(device_count);
-	vkEnumeratePhysicalDevices(instance, &device_count, devices.data());
+	auto physical_devices = std::vector<VkPhysicalDevice>(device_count);
+	vkEnumeratePhysicalDevices(instance, &device_count, physical_devices.data());
 
-	auto* device = VkPhysicalDevice{};
-	for (auto& physical_device : devices) {
+	auto* physical_device = VkPhysicalDevice{};
+	for (auto& candidate_device : physical_devices) {
 		auto queue_family_count = uint32_t{};
 		vkGetPhysicalDeviceQueueFamilyProperties(
-				physical_device,
+				candidate_device,
 				&queue_family_count,
 				nullptr);
 		auto queue_families =
 				std::vector<VkQueueFamilyProperties>(queue_family_count);
 		vkGetPhysicalDeviceQueueFamilyProperties(
-				physical_device,
+				candidate_device,
 				&queue_family_count,
 				queue_families.data());
 		for (auto& queue_family : queue_families) {
 			if ((queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0U) {
-				if (device == nullptr) {
-					device = physical_device;
+				if (physical_device == nullptr) {
+					physical_device = candidate_device;
 					break;
 				}
 				auto props = VkPhysicalDeviceProperties{};
-				vkGetPhysicalDeviceProperties(physical_device, &props);
+				vkGetPhysicalDeviceProperties(candidate_device, &props);
 				if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-					device = physical_device;
+					physical_device = candidate_device;
 					break;
 				}
 			}
 		}
 	}
-	if (device == nullptr) {
+	if (physical_device == nullptr) {
 		fmt::print(stderr, "Failed to find a suitable physical device\n");
 		std::terminate();
 	}
@@ -186,7 +181,7 @@ auto main() -> int {
 		glfwPollEvents();
 	}
 
-#ifdef DEBUG
+#if USE_VALIDATION_LAYERS
 	auto bkDestroyDebugUtilsMessengerExt =
 			// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
 			reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
