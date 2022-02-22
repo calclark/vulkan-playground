@@ -96,24 +96,23 @@ auto main() -> int {
 			std::vector<const char*>{"VK_LAYER_KHRONOS_validation"};
 #endif
 
-	auto instance_info = VkInstanceCreateInfo{
-			.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+	auto instance_info = VkInstanceCreateInfo {
+		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
 #if USE_VALIDATION_LAYERS
-			.pNext = &debug_info,
+		.pNext = &debug_info,
 #else
-			.pNext = VK_NULL_HANDLE,
+		.pNext = VK_NULL_HANDLE,
 #endif
-			.flags = 0,
-			.pApplicationInfo = &application_info,
+		.flags = 0, .pApplicationInfo = &application_info,
 #if USE_VALIDATION_LAYERS
-			.enabledLayerCount = static_cast<uint32_t>(validation_layers.size()),
-			.ppEnabledLayerNames = validation_layers.data(),
+		.enabledLayerCount = static_cast<uint32_t>(validation_layers.size()),
+		.ppEnabledLayerNames = validation_layers.data(),
 #else
-			.enabledLayerCount = 0,
-			.ppEnabledLayerNames = VK_NULL_HANDLE,
+		.enabledLayerCount = 0, .ppEnabledLayerNames = VK_NULL_HANDLE,
 #endif
-			.enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
-			.ppEnabledExtensionNames = extensions.data()};
+		.enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+		.ppEnabledExtensionNames = extensions.data()
+	};
 
 	auto* instance = VkInstance{};
 	if (vkCreateInstance(&instance_info, VK_NULL_HANDLE, &instance) !=
@@ -144,6 +143,7 @@ auto main() -> int {
 	vkEnumeratePhysicalDevices(instance, &device_count, physical_devices.data());
 
 	auto* physical_device = VkPhysicalDevice{};
+	auto queue_family_idx = uint32_t{};
 	for (auto& candidate_device : physical_devices) {
 		auto queue_family_count = uint32_t{};
 		vkGetPhysicalDeviceQueueFamilyProperties(
@@ -156,16 +156,20 @@ auto main() -> int {
 				candidate_device,
 				&queue_family_count,
 				queue_families.data());
+		auto idx = uint32_t{};
 		for (auto& queue_family : queue_families) {
+			idx++;
 			if ((queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0U) {
 				if (physical_device == nullptr) {
 					physical_device = candidate_device;
+					queue_family_idx = idx;
 					break;
 				}
 				auto props = VkPhysicalDeviceProperties{};
 				vkGetPhysicalDeviceProperties(candidate_device, &props);
 				if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
 					physical_device = candidate_device;
+					queue_family_idx = idx;
 					break;
 				}
 			}
@@ -176,11 +180,41 @@ auto main() -> int {
 		std::terminate();
 	}
 
+	auto queue_priority = 1.0F;
+	auto device_queue_info = VkDeviceQueueCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+			.pNext = VK_NULL_HANDLE,
+			.flags = 0,
+			.queueFamilyIndex = queue_family_idx,
+			.queueCount = 1,
+			.pQueuePriorities = &queue_priority};
+	auto device_info = VkDeviceCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+			.pNext = VK_NULL_HANDLE,
+			.flags = 0,
+			.queueCreateInfoCount = 1,
+			.pQueueCreateInfos = &device_queue_info,
+			.enabledLayerCount = 0,  // ignored
+			.ppEnabledLayerNames = VK_NULL_HANDLE,  // ignored
+			.enabledExtensionCount = 0,
+			.ppEnabledExtensionNames = VK_NULL_HANDLE,
+			.pEnabledFeatures = VK_NULL_HANDLE};
+	auto* logical_device = VkDevice{};
+	if (vkCreateDevice(
+					physical_device,
+					&device_info,
+					VK_NULL_HANDLE,
+					&logical_device) != VK_SUCCESS) {
+		fmt::print(stderr, "Failed to create a logical device\n");
+		std::terminate();
+	}
+
 	glfwSetKeyCallback(window, glfw_key_callback);
 	while (glfwWindowShouldClose(window) == GLFW_FALSE) {
 		glfwPollEvents();
 	}
 
+	vkDestroyDevice(logical_device, VK_NULL_HANDLE);
 #if USE_VALIDATION_LAYERS
 	auto bkDestroyDebugUtilsMessengerExt =
 			// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
