@@ -3,6 +3,8 @@
 #include <fmt/core.h>
 
 #include <memory>
+#include <optional>
+#include <set>
 #include <span>
 #include <vector>
 #include <cstdio>
@@ -138,14 +140,34 @@ auto main() -> int {
 	}
 #endif
 
+	auto* surface = VkSurfaceKHR{};
+	if (glfwCreateWindowSurface(instance, window, VK_NULL_HANDLE, &surface) !=
+			VK_SUCCESS) {
+		fmt::print(stderr, "Failed to create a window surface\n");
+		std::terminate();
+	}
+
 	auto device_count = uint32_t{};
 	vkEnumeratePhysicalDevices(instance, &device_count, VK_NULL_HANDLE);
 	auto physical_devices = std::vector<VkPhysicalDevice>(device_count);
 	vkEnumeratePhysicalDevices(instance, &device_count, physical_devices.data());
 
-	auto* physical_device = VkPhysicalDevice{};
-	auto queue_family_idx = uint32_t{};
+	struct PhysicalDeviceInfo {
+		VkPhysicalDevice device{};
+		std::optional<uint32_t> graphics_family_idx;
+		std::optional<uint32_t> present_family_idx;
+		bool discrete{};
+	};
+
+	auto vkGetPhysicalDeviceSurfaceSupportKHR =
+			// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+			reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceSupportKHR>(
+					vk_func(instance, "vkGetPhysicalDeviceSurfaceSupportKHR"));
+
+	auto devices_info = std::vector<PhysicalDeviceInfo>(device_count);
 	for (auto& candidate_device : physical_devices) {
+		auto physical_device_info = PhysicalDeviceInfo{};
+		physical_device_info.device = candidate_device;
 		auto queue_family_count = uint32_t{};
 		vkGetPhysicalDeviceQueueFamilyProperties(
 				candidate_device,
@@ -160,62 +182,97 @@ auto main() -> int {
 		auto idx = uint32_t{};
 		for (auto& queue_family : queue_families) {
 			if ((queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0U) {
-				if (physical_device == nullptr) {
-					physical_device = candidate_device;
-					queue_family_idx = idx;
-					break;
-				}
-				auto props = VkPhysicalDeviceProperties{};
-				vkGetPhysicalDeviceProperties(candidate_device, &props);
-				if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-					physical_device = candidate_device;
-					queue_family_idx = idx;
-					break;
-				}
+				physical_device_info.graphics_family_idx = idx;
+			}
+			auto supports_present = VkBool32{};
+			vkGetPhysicalDeviceSurfaceSupportKHR(
+					candidate_device,
+					idx,
+					surface,
+					&supports_present);
+			if (supports_present == VK_TRUE) {
+				physical_device_info.present_family_idx = idx;
 			}
 			idx++;
 		}
+		auto props = VkPhysicalDeviceProperties{};
+		vkGetPhysicalDeviceProperties(candidate_device, &props);
+		if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+			physical_device_info.discrete = true;
+		}
+		devices_info.emplace_back(physical_device_info);
 	}
-	if (physical_device == nullptr) {
+
+	auto physical_device_info = PhysicalDeviceInfo{};
+	for (auto& device : devices_info) {
+		if (device.graphics_family_idx.has_value() &&
+				device.present_family_idx.has_value() &&
+				!physical_device_info.discrete) {
+			physical_device_info = device;
+		}
+	}
+	if (physical_device_info.device == nullptr) {
 		fmt::print(stderr, "Failed to find a suitable physical device\n");
 		std::terminate();
 	}
 
+	auto queue_create_infos = std::vector<VkDeviceQueueCreateInfo>{};
+	auto unique_queue_families = std::set<uint32_t>{
+			*physical_device_info.present_family_idx,
+			*physical_device_info.graphics_family_idx};
 	auto queue_priority = 1.0F;
-	auto device_queue_info = VkDeviceQueueCreateInfo{
-			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-			.pNext = VK_NULL_HANDLE,
-			.flags = 0,
-			.queueFamilyIndex = queue_family_idx,
-			.queueCount = 1,
-			.pQueuePriorities = &queue_priority};
+	for (auto queue_family : unique_queue_families) {
+		auto device_queue_info = VkDeviceQueueCreateInfo{
+				.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+				.pNext = VK_NULL_HANDLE,
+				.flags = 0,
+				.queueFamilyIndex = queue_family,
+				.queueCount = 1,
+				.pQueuePriorities = &queue_priority};
+		queue_create_infos.emplace_back(device_queue_info);
+	}
 	auto device_info = VkDeviceCreateInfo{
 			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
 			.pNext = VK_NULL_HANDLE,
 			.flags = 0,
-			.queueCreateInfoCount = 1,
-			.pQueueCreateInfos = &device_queue_info,
+			.queueCreateInfoCount = static_cast<uint32_t>(queue_create_infos.size()),
+			.pQueueCreateInfos = queue_create_infos.data(),
 			.enabledLayerCount = 0,  // ignored
 			.ppEnabledLayerNames = VK_NULL_HANDLE,  // ignored
 			.enabledExtensionCount = 0,
 			.ppEnabledExtensionNames = VK_NULL_HANDLE,
 			.pEnabledFeatures = VK_NULL_HANDLE};
-	auto* logical_device = VkDevice{};
+	auto* device = VkDevice{};
 	if (vkCreateDevice(
-					physical_device,
+					physical_device_info.device,
 					&device_info,
 					VK_NULL_HANDLE,
-					&logical_device) != VK_SUCCESS) {
+					&device) != VK_SUCCESS) {
 		fmt::print(stderr, "Failed to create a logical device\n");
 		std::terminate();
 	}
+
+	auto* graphics_queue = VkQueue{};
+	vkGetDeviceQueue(
+			device,
+			*physical_device_info.graphics_family_idx,
+			0,
+			&graphics_queue);
+
+	auto* present_queue = VkQueue{};
+	vkGetDeviceQueue(
+			device,
+			*physical_device_info.present_family_idx,
+			0,
+			&present_queue);
 
 	glfwSetKeyCallback(window, glfw_key_callback);
 	while (glfwWindowShouldClose(window) == GLFW_FALSE) {
 		glfwPollEvents();
 	}
 
-	vkDestroyDevice(logical_device, VK_NULL_HANDLE);
+	vkDestroyDevice(device, VK_NULL_HANDLE);
+	vkDestroySurfaceKHR(instance, surface, VK_NULL_HANDLE);
 #ifdef USE_VALIDATION_LAYERS
 	auto vkDestroyDebugUtilsMessengerExt =
 			// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
