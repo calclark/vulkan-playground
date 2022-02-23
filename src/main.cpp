@@ -159,7 +159,6 @@ auto main() -> int {
 				queue_families.data());
 		auto idx = uint32_t{};
 		for (auto& queue_family : queue_families) {
-			idx++;
 			if ((queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0U) {
 				if (physical_device == nullptr) {
 					physical_device = candidate_device;
@@ -174,6 +173,7 @@ auto main() -> int {
 					break;
 				}
 			}
+			idx++;
 		}
 	}
 	if (physical_device == nullptr) {
