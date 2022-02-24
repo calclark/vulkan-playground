@@ -372,6 +372,38 @@ auto main() -> int {
 			&image_count,
 			swap_chain_images.data());
 
+	auto swap_chain_views = std::vector<VkImageView>(image_count);
+	for (auto& image : swap_chain_images) {
+		auto view_info = VkImageViewCreateInfo{
+				.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+				.pNext = VK_NULL_HANDLE,
+				.flags = 0,
+				.image = image,
+				.viewType = VK_IMAGE_VIEW_TYPE_2D,
+				.format = surface_format.format,
+				.components =
+						VkComponentMapping{
+								.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+								.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+								.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+								.a = VK_COMPONENT_SWIZZLE_IDENTITY},
+				.subresourceRange = VkImageSubresourceRange{
+						.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+						.baseMipLevel = 0,
+						.levelCount = 1,
+						.baseArrayLayer = 0,
+						.layerCount = 1}};
+		auto* view = VkImageView{};
+		if (vkCreateImageView(device, &view_info, VK_NULL_HANDLE, &view) !=
+				VK_SUCCESS) {
+			fmt::print(
+					stderr,
+					"Failed to create an image view for a swap chain images");
+			std::terminate();
+		}
+		swap_chain_views.emplace_back(view);
+	}
+
 	auto* graphics_queue = VkQueue{};
 	vkGetDeviceQueue(
 			device,
@@ -391,6 +423,9 @@ auto main() -> int {
 		glfwWaitEvents();
 	}
 
+	for (auto& view : swap_chain_views) {
+		vkDestroyImageView(device, view, VK_NULL_HANDLE);
+	}
 	vkDestroySwapchainKHR(device, swap_chain, VK_NULL_HANDLE);
 	vkDestroyDevice(device, VK_NULL_HANDLE);
 	vkDestroySurfaceKHR(instance, surface, VK_NULL_HANDLE);
