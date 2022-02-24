@@ -2,6 +2,8 @@
 #include <GLFW/glfw3.h>
 #include <fmt/core.h>
 
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -53,6 +55,47 @@ auto vk_func(const VkInstance& instance, const char* func_name)
 	return func;
 }
 
+auto read_file(const std::filesystem::path& path) -> std::vector<char> {
+	auto file = std::ifstream(path, std::ios::ate | std::ios::binary);
+	auto file_size = file.tellg();
+	auto buffer = std::vector<char>(file_size);
+	file.seekg(0);
+	file.read(buffer.data(), file_size);
+	return buffer;
+}
+
+auto create_shader_modules(VkDevice& device, const std::span<char>& src)
+		-> VkShaderModule {
+	auto module_info = VkShaderModuleCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.pNext = VK_NULL_HANDLE,
+			.flags = 0,
+			.codeSize = src.size_bytes(),
+			// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+			.pCode = reinterpret_cast<uint32_t*>(src.data())};
+	auto* module = VkShaderModule{};
+	if (vkCreateShaderModule(device, &module_info, VK_NULL_HANDLE, &module) !=
+			VK_SUCCESS) {
+		fmt::print(stderr, "Failed to create shader module\n");
+		std::terminate();
+	}
+	return module;
+}
+
+auto create_pipeline_shader_info(
+		VkShaderModule& module,
+		VkShaderStageFlagBits stage) -> VkPipelineShaderStageCreateInfo {
+	return {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.pNext = VK_NULL_HANDLE,
+			.flags = 0,
+			.stage = stage,
+			.module = module,
+			.pName = "main",
+			.pSpecializationInfo = VK_NULL_HANDLE};
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity) lol
 auto main() -> int {
 	glfwSetErrorCallback(glfw_error_callback);
 	glfwInit();
@@ -404,6 +447,18 @@ auto main() -> int {
 		swap_chain_views.emplace_back(view);
 	}
 
+	auto vert_shader_src = read_file("shaders/shader.vert.spv");
+	auto* vert_shader_module = create_shader_modules(device, vert_shader_src);
+	auto frag_shader_src = read_file("shaders/shader.frag.spv");
+	auto* frag_shader_module = create_shader_modules(device, frag_shader_src);
+	auto shader_stages = std::array<VkPipelineShaderStageCreateInfo, 2>{
+			create_pipeline_shader_info(
+					vert_shader_module,
+					VK_SHADER_STAGE_VERTEX_BIT),
+			create_pipeline_shader_info(
+					frag_shader_module,
+					VK_SHADER_STAGE_FRAGMENT_BIT)};
+
 	auto* graphics_queue = VkQueue{};
 	vkGetDeviceQueue(
 			device,
@@ -423,6 +478,8 @@ auto main() -> int {
 		glfwWaitEvents();
 	}
 
+	vkDestroyShaderModule(device, vert_shader_module, VK_NULL_HANDLE);
+	vkDestroyShaderModule(device, frag_shader_module, VK_NULL_HANDLE);
 	for (auto& view : swap_chain_views) {
 		vkDestroyImageView(device, view, VK_NULL_HANDLE);
 	}
