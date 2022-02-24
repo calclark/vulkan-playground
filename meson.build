@@ -36,4 +36,5 @@ out = executable(
 )
 
 run_target('run', command: out)
+subdir('shaders')
 
