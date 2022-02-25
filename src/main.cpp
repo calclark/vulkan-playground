@@ -459,6 +459,87 @@ auto main() -> int {
 					frag_shader_module,
 					VK_SHADER_STAGE_FRAGMENT_BIT)};
 
+	auto vertex_input_state_info = VkPipelineVertexInputStateCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+			.pNext = VK_NULL_HANDLE,
+			.flags = 0,
+			.vertexBindingDescriptionCount = 0,
+			.pVertexBindingDescriptions = VK_NULL_HANDLE,
+			.vertexAttributeDescriptionCount = 0,
+			.pVertexAttributeDescriptions = VK_NULL_HANDLE};
+
+	auto input_assembly_state_info = VkPipelineInputAssemblyStateCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+			.pNext = VK_NULL_HANDLE,
+			.flags = 0,
+			.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+			.primitiveRestartEnable = VK_FALSE};
+
+	auto viewport = VkViewport{
+			.x = 0,
+			.y = 0,
+			.width = static_cast<float>(capabilities.currentExtent.width),
+			.height = static_cast<float>(capabilities.currentExtent.height),
+			.minDepth = 0,
+			.maxDepth = 1};
+	auto scissor = VkRect2D{
+			.offset = VkOffset2D{.x = 0, .y = 0},
+			.extent = capabilities.currentExtent};
+	auto viewport_state_info = VkPipelineViewportStateCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+			.pNext = VK_NULL_HANDLE,
+			.flags = 0,
+			.viewportCount = 1,
+			.pViewports = &viewport,
+			.scissorCount = 1,
+			.pScissors = &scissor};
+
+	auto rasterizer = VkPipelineRasterizationStateCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+			.pNext = VK_NULL_HANDLE,
+			.flags = 0,
+			.depthClampEnable = VK_FALSE,
+			.rasterizerDiscardEnable = VK_FALSE,
+			.polygonMode = VK_POLYGON_MODE_FILL,
+			.cullMode = VK_CULL_MODE_BACK_BIT,
+			.frontFace = VK_FRONT_FACE_CLOCKWISE,
+			.depthBiasEnable = VK_FALSE,
+			.depthBiasConstantFactor = 0,
+			.depthBiasClamp = 0,
+			.depthBiasSlopeFactor = 0,
+			.lineWidth = 1};
+
+	auto multisampling = VkPipelineMultisampleStateCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+			.pNext = VK_NULL_HANDLE,
+			.flags = 0,
+			.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+			.sampleShadingEnable = VK_FALSE,
+			.minSampleShading = 0,
+			.pSampleMask = VK_NULL_HANDLE,
+			.alphaToCoverageEnable = VK_FALSE,
+			.alphaToOneEnable = VK_FALSE};
+
+	auto color_blend_attachment = VkPipelineColorBlendAttachmentState{
+			.blendEnable = VK_FALSE,
+			.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+			.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+			.colorBlendOp = VK_BLEND_OP_ADD,
+			.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+			.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+			.alphaBlendOp = VK_BLEND_OP_ADD,
+			.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+					VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
+	auto color_blending = VkPipelineColorBlendStateCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+			.pNext = VK_NULL_HANDLE,
+			.flags = 0,
+			.logicOpEnable = VK_FALSE,
+			.logicOp = VK_LOGIC_OP_COPY,
+			.attachmentCount = 1,
+			.pAttachments = &color_blend_attachment,
+			.blendConstants = {0, 0, 0, 0}};
+
 	auto* graphics_queue = VkQueue{};
 	vkGetDeviceQueue(
 			device,
