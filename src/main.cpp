@@ -540,6 +540,18 @@ auto main() -> int {
 			.pAttachments = &color_blend_attachment,
 			.blendConstants = {0, 0, 0, 0}};
 
+	auto pipeline_layout_info = VkPipelineLayoutCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+	auto* pipeline_layout = VkPipelineLayout{};
+	if (vkCreatePipelineLayout(
+					device,
+					&pipeline_layout_info,
+					nullptr,
+					&pipeline_layout) != VK_SUCCESS) {
+		fmt::print("Failed to create pipeline layout\n");
+		std::terminate();
+	}
+
 	auto* graphics_queue = VkQueue{};
 	vkGetDeviceQueue(
 			device,
@@ -559,6 +571,7 @@ auto main() -> int {
 		glfwWaitEvents();
 	}
 
+	vkDestroyPipelineLayout(device, pipeline_layout, VK_NULL_HANDLE);
 	vkDestroyShaderModule(device, vert_shader_module, VK_NULL_HANDLE);
 	vkDestroyShaderModule(device, frag_shader_module, VK_NULL_HANDLE);
 	for (auto& view : swap_chain_views) {
